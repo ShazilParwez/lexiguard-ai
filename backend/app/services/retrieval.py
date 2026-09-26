@@ -1,37 +1,74 @@
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_core.vectorstores import InMemoryVectorStore
-from langchain_core.documents import Document
-from app.config import settings
+"""
+Vector Store Manager
+====================
+Uses an in-memory dict of {document_id: {"vectors": [...], "docs": [...]}}
+to store embeddings produced by the GeminiEmbeddings adapter.
+
+No ChromaDB, no persisted directories, no local state outside this process.
+
+Similarity search is cosine similarity computed with numpy (pure-Python
+fallback also available).
+"""
+
+import math
+from typing import List
+from app.services.embeddings import gemini_embeddings
+
+
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    mag_a = math.sqrt(sum(x * x for x in a))
+    mag_b = math.sqrt(sum(x * x for x in b))
+    if mag_a == 0 or mag_b == 0:
+        return 0.0
+    return dot / (mag_a * mag_b)
+
+
+class SimpleDoc:
+    """Minimal stand-in for LangChain Document so routes.py works unchanged."""
+    def __init__(self, page_content: str, metadata: dict):
+        self.page_content = page_content
+        self.metadata = metadata
+
 
 class VectorStoreManager:
     def __init__(self):
-        # We will use an in-memory dictionary to store our vector stores per document
-        # This completely bypasses the need for the massive ChromaDB and ONNX packages!
-        self.stores = {}
+        # {document_id: {"vectors": List[List[float]], "docs": List[SimpleDoc]}}
+        self.stores: dict = {}
 
-    def get_embeddings(self):
-        api_key = settings.gemini_api_key
-        model_name = f"models/{settings.gemini_embedding_model}" if not settings.gemini_embedding_model.startswith("models/") else settings.gemini_embedding_model
-        
-        if not api_key:
-            api_key = "dummy"
-            
-        return GoogleGenerativeAIEmbeddings(model=model_name, google_api_key=api_key)
+    def store_document(self, document_id: str, chunks: List[dict]):
+        """Embed chunks and store vectors in memory."""
+        if not chunks:
+            self.stores[document_id] = {"vectors": [], "docs": []}
+            return
 
-    def store_document(self, document_id: str, chunks: list):
-        docs = [Document(page_content=c["text"], metadata=c["metadata"]) for c in chunks]
-        
-        # Initialize an in-memory vector store for this document
-        store = InMemoryVectorStore(embedding=self.get_embeddings())
-        store.add_documents(docs)
-        
-        self.stores[document_id] = store
+        texts = [c["text"] for c in chunks]
+        vectors = gemini_embeddings.embed_documents(texts)
 
-    def retrieve(self, document_id: str, query: str, k: int = 4):
+        docs = [
+            SimpleDoc(page_content=c["text"], metadata=c.get("metadata", {}))
+            for c in chunks
+        ]
+
+        self.stores[document_id] = {"vectors": vectors, "docs": docs}
+
+    def retrieve(self, document_id: str, query: str, k: int = 4) -> List[SimpleDoc]:
+        """Return top-k most similar chunks using cosine similarity."""
         if document_id not in self.stores:
             return []
-            
+
         store = self.stores[document_id]
-        return store.similarity_search(query, k=k)
+        if not store["vectors"]:
+            return []
+
+        query_vector = gemini_embeddings.embed_query(query)
+
+        scored = [
+            (_cosine_similarity(query_vector, v), doc)
+            for v, doc in zip(store["vectors"], store["docs"])
+        ]
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [doc for _, doc in scored[:k]]
+
 
 vector_store_manager = VectorStoreManager()

@@ -3,7 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
-    gemini_embedding_model: str = "text-embedding-004"
+    # gemini-embedding-001 is also available if gemini-embedding-2 has quota issues
+    gemini_embedding_model: str = "gemini-embedding-2"
     google_cloud_project: str = ""
     max_file_size_mb: int = 10
     
