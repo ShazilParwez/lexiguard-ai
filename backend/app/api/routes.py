@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.schemas.api import UploadResponse, DocumentOverview, DocumentSummary, AskRequest, QuestionAnswer, TerminologyRequest, TerminologyExplanation, ComparisonResult, ActionPlan
 from app.services.document_parser import DocumentParser
 from app.services.chunking import Chunker
@@ -13,7 +13,7 @@ from typing import List
 router = APIRouter()
 
 @router.post("/documents/upload", response_model=UploadResponse)
-async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...)):
     document_id = str(uuid.uuid4())
     ext = os.path.splitext(file.filename)[1]
     
@@ -37,15 +37,16 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
         "full_text": "\n".join([p["text"] for p in pages])
     }
     
-    # Background processing for chunking and embeddings
-    background_tasks.add_task(process_document_background, document_id, pages)
+    # Synchronous processing for serverless compatibility (Vercel kills background tasks)
+    process_document(document_id, pages)
     
-    # Also we can clean up the temp file in background
-    background_tasks.add_task(os.remove, temp_path)
+    # Clean up the temp file
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
     
     return {"document_id": document_id, "filename": file.filename, "message": "Upload successful"}
 
-def process_document_background(document_id: str, pages: List[dict]):
+def process_document(document_id: str, pages: List[dict]):
     chunks = Chunker.chunk_document(pages)
     vector_store_manager.store_document(document_id, chunks)
 
