@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { api } from '../services/api';
-import type { ComparisonResult, ComparisonChange } from '../types';
-import { ArrowLeft, Scale, Upload, Loader2, ArrowRight, FileText, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import type { ComparisonResult } from '../types';
+import { ArrowLeft, Scale, Upload, Loader2, ArrowRight, FileText, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function Compare() {
-  const navigate = useNavigate();
   const [fileA, setFileA] = useState<File | null>(null);
   const [fileB, setFileB] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);

@@ -1,6 +1,5 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Scale, ArrowRight, HelpCircle, CheckCircle2, UploadCloud, Eye, ListChecks } from 'lucide-react';
+import { FileText, Scale, ArrowRight, CheckCircle2, UploadCloud, Eye, ListChecks } from 'lucide-react';
 
 export default function Landing() {
   return (

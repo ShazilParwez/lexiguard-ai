@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { api } from '../services/api';
 import type { DocumentOverview, DocumentSummary, FindingsResult, ActionPlan } from '../types';
-import { Loader2, FileText, AlertTriangle, HelpCircle, CheckSquare, Search, ZoomIn, ZoomOut, Maximize, AlertCircle } from 'lucide-react';
+import { Loader2, FileText, AlertTriangle, HelpCircle, CheckSquare, ZoomIn, ZoomOut, Maximize, AlertCircle } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import clsx from 'clsx';
 import ChatInterface from '../components/ChatInterface';
