@@ -1,0 +1,69 @@
+# Environment variables and secrets (CRITICAL)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+env.bak/
+venv.bak/
+
+# Frontend / Node.js
+node_modules/
+dist/
+dist-ssr/
+*.local
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Temporary uploads and data
+backend/temp_uploads/
+*.sqlite3
+*.db
+uploads/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
