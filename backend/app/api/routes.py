@@ -47,8 +47,15 @@ async def upload_document(file: UploadFile = File(...)):
     return {"document_id": document_id, "filename": file.filename, "message": "Upload successful"}
 
 def process_document(document_id: str, pages: List[dict]):
-    chunks = Chunker.chunk_document(pages)
-    vector_store_manager.store_document(document_id, chunks)
+    from fastapi import HTTPException
+    try:
+        chunks = Chunker.chunk_document(pages)
+        vector_store_manager.store_document(document_id, chunks)
+    except RuntimeError as e:
+        # Missing API key or embedding configuration error
+        raise HTTPException(status_code=503, detail=f"Embedding service unavailable: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Document processing failed: {str(e)}")
 
 @router.get("/documents/{document_id}")
 async def get_document(document_id: str):
