@@ -13,14 +13,17 @@ class GeminiService:
         else:
             self.client = None
 
-    def _get_dummy_data(self, schema: type[BaseModel], is_error: bool = False) -> BaseModel:
+    def _get_dummy_data(self, schema: type[BaseModel], is_error: bool = False, error_msg: str = "") -> BaseModel:
         # A simple fallback for demo/development when API key is not set or there's an error
-        # In a real app we'd construct valid mocks. Here we try to create an empty but valid model.
-        # This uses model_construct which bypasses validation, but we try to set is_demo_response
         try:
             dummy = schema.model_construct()
             if hasattr(dummy, 'is_demo_response'):
                 dummy.is_demo_response = True
+            if is_error:
+                for field_name, field_info in schema.model_fields.items():
+                    if field_info.annotation == str:
+                        setattr(dummy, field_name, f"API Error: {error_msg}")
+                        break
             return dummy
         except Exception:
             return schema.construct()
@@ -61,7 +64,7 @@ class GeminiService:
             except json.JSONDecodeError as e:
                 print(f"Gemini API returned malformed JSON: {e}")
                 if attempt == max_retries - 1:
-                    return self._get_dummy_data(schema, is_error=True)
+                    return self._get_dummy_data(schema, is_error=True, error_msg=str(e))
             except Exception as e:
                 print(f"Gemini API error (Attempt {attempt+1}/{max_retries}): {e}")
                 if "429" in str(e) or "Too Many Requests" in str(e) or "quota" in str(e).lower():
@@ -69,6 +72,6 @@ class GeminiService:
                         time.sleep(2 * (attempt + 1))
                         continue
                 if attempt == max_retries - 1:
-                    return self._get_dummy_data(schema, is_error=True)
+                    return self._get_dummy_data(schema, is_error=True, error_msg=str(e))
 
 gemini_service = GeminiService()
