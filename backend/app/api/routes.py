@@ -34,6 +34,12 @@ async def upload_document(file: UploadFile = File(...)):
     # Clean up the temp file
     if os.path.exists(temp_path):
         os.remove(temp_path)
+        
+    if not full_text.strip():
+        raise HTTPException(
+            status_code=400, 
+            detail="No extractable text found. This appears to be a scanned image or an empty document. LexiGuard requires text-searchable files."
+        )
     
     return {
         "document_id": document_id, 

@@ -1,5 +1,5 @@
 import os
-import pypdf
+import fitz
 import docx
 from typing import List, Dict, Any
 
@@ -20,11 +20,12 @@ class DocumentParser:
     @staticmethod
     def parse_pdf(file_path: str) -> List[Dict[str, Any]]:
         pages = []
-        with open(file_path, "rb") as f:
-            reader = pypdf.PdfReader(f)
-            for i in range(len(reader.pages)):
-                text = reader.pages[i].extract_text()
-                pages.append({"page_number": i + 1, "text": text if text else ""})
+        doc = fitz.open(file_path)
+        for i in range(len(doc)):
+            page = doc[i]
+            text = page.get_text("text")
+            pages.append({"page_number": i + 1, "text": text if text else ""})
+        doc.close()
         return pages
 
     @staticmethod
