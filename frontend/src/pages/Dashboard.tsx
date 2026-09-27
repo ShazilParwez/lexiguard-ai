@@ -16,7 +16,11 @@ export default function Dashboard() {
       const response = await api.uploadDocument(file);
       navigate(`/workspace/${response.document_id}`);
     } catch (err: any) {
-      setError(err.response?.data?.detail || "An error occurred during upload.");
+      if (err.response?.status === 413) {
+        setError("File is too large. Vercel serverless functions have a 4.5MB limit. Please upload a smaller file.");
+      } else {
+        setError(err.response?.data?.detail || "An error occurred during upload.");
+      }
       setIsUploading(false);
     }
   };
@@ -116,7 +120,7 @@ export default function Dashboard() {
             >
               Browse Files
             </button>
-            <p className="text-xs text-slate-400 mt-6 font-medium">Supported: PDF · DOCX · TXT (Max 10 MB)</p>
+            <p className="text-xs text-slate-400 mt-6 font-medium">Supported: PDF · DOCX · TXT (Max 4.5 MB)</p>
           </div>
         )}
       </div>

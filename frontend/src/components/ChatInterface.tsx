@@ -3,7 +3,7 @@ import { api } from '../services/api';
 import type { QuestionAnswer } from '../types';
 import { Send, Loader2, BookOpen, HelpCircle } from 'lucide-react';
 
-export default function ChatInterface({ documentId }: { documentId: string }) {
+export default function ChatInterface({ documentId, fullText }: { documentId: string, fullText: string }) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<Array<{q: string, a?: QuestionAnswer, error?: string}>>([]);
@@ -20,7 +20,7 @@ export default function ChatInterface({ documentId }: { documentId: string }) {
     setLoading(true);
     
     try {
-      const ans = await api.askQuestion(documentId, currentQuery);
+      const ans = await api.askQuestion(documentId, currentQuery, fullText);
       setHistory(prev => {
         const next = [...prev];
         next[next.length - 1].a = ans;

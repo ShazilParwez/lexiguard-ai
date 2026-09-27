@@ -14,7 +14,7 @@ export default function Workspace() {
   const [summary, setSummary] = useState<DocumentSummary | null>(null);
   const [findings, setFindings] = useState<FindingsResult | null>(null);
   const [actionPlan, setActionPlan] = useState<ActionPlan | null>(null);
-  const [documentContent, setDocumentContent] = useState<{document_id: string, filename: string, pages: any[]} | null>(null);
+  const [documentContent, setDocumentContent] = useState<{document_id: string, filename: string, pages: any[], full_text?: string} | null>(null);
   
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
@@ -25,12 +25,17 @@ export default function Workspace() {
     const loadData = async () => {
       try {
         setLoading(true);
-        const [o, s, f, a, docData] = await Promise.all([
-          api.getOverview(id),
-          api.getSummary(id),
-          api.getFindings(id),
-          api.getActionPlan(id),
-          api.getDocument(id).catch(() => null)
+        const docData = await api.getDocument(id).catch(() => null);
+        if (!docData || !docData.full_text) {
+          throw new Error("Document not found in cache");
+        }
+        setDocumentContent(docData);
+        
+        const [o, s, f, a] = await Promise.all([
+          api.getOverview(id, docData.full_text),
+          api.getSummary(id, docData.full_text),
+          api.getFindings(id, docData.full_text),
+          api.getActionPlan(id, docData.full_text)
         ]);
         setOverview(o);
         setSummary(s);
@@ -258,7 +263,7 @@ export default function Workspace() {
             </Tabs.Content>
 
             <Tabs.Content value="questions" className="h-full animate-in fade-in duration-300 outline-none">
-              <ChatInterface documentId={id!} />
+              {documentContent?.full_text && <ChatInterface documentId={id!} fullText={documentContent.full_text} />}
             </Tabs.Content>
 
             <Tabs.Content value="action" className="space-y-6 animate-in fade-in duration-300 outline-none">

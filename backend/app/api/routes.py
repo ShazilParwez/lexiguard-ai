@@ -1,10 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.schemas.api import UploadResponse, DocumentOverview, DocumentSummary, AskRequest, QuestionAnswer, TerminologyRequest, TerminologyExplanation, ComparisonResult, ActionPlan
+from app.schemas.api import UploadResponse, DocumentOverview, DocumentSummary, AskRequest, QuestionAnswer, TerminologyRequest, TerminologyExplanation, ComparisonResult, ActionPlan, DocumentRequest
 from app.services.document_parser import DocumentParser
 from app.services.chunking import Chunker
 from app.services.retrieval import vector_store_manager
 from app.services.gemini_service import gemini_service
-from app.models.domain import DOCUMENTS_STORE, ANALYSIS_STORE
 import uuid
 import os
 import tempfile
@@ -30,79 +29,41 @@ async def upload_document(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
         
-    # Store in memory
-    DOCUMENTS_STORE[document_id] = {
-        "filename": file.filename,
-        "pages": pages,
-        "full_text": "\n".join([p["text"] for p in pages])
-    }
-    
-    # Synchronous processing for serverless compatibility (Vercel kills background tasks)
-    process_document(document_id, pages)
+    full_text = "\n".join([p["text"] for p in pages])
     
     # Clean up the temp file
     if os.path.exists(temp_path):
         os.remove(temp_path)
     
-    return {"document_id": document_id, "filename": file.filename, "message": "Upload successful"}
-
-def process_document(document_id: str, pages: List[dict]):
-    from fastapi import HTTPException
-    try:
-        chunks = Chunker.chunk_document(pages)
-        vector_store_manager.store_document(document_id, chunks)
-    except RuntimeError as e:
-        # Missing API key or embedding configuration error
-        raise HTTPException(status_code=503, detail=f"Embedding service unavailable: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Document processing failed: {str(e)}")
-
-@router.get("/documents/{document_id}")
-async def get_document(document_id: str):
-    if document_id not in DOCUMENTS_STORE:
-        raise HTTPException(status_code=404, detail="Document not found")
-    
     return {
-        "document_id": document_id,
-        "filename": DOCUMENTS_STORE[document_id]["filename"],
-        "pages": DOCUMENTS_STORE[document_id]["pages"]
+        "document_id": document_id, 
+        "filename": file.filename, 
+        "message": "Upload successful",
+        "full_text": full_text,
+        "pages": pages
     }
 
 @router.post("/documents/{document_id}/analyze", response_model=DocumentOverview)
-def analyze_document(document_id: str):
-    if document_id not in DOCUMENTS_STORE:
-        raise HTTPException(status_code=404, detail="Document not found")
-        
-    doc = DOCUMENTS_STORE[document_id]
+def analyze_document(document_id: str, request: DocumentRequest):
     prompt = f"""
     ROLE: You are an expert legal analyst.
     TASK: Analyze the following legal document and provide an overview.
     CONSTRAINTS: Be objective. Do not provide legal advice. If information is missing, state 'Not identified in the document.'
     EVIDENCE:
-    {doc['full_text'][:15000]} # Limiting to 15000 chars for initial overview to avoid token limits if too long
+    {request.full_text[:15000]} # Limiting to 15000 chars for initial overview to avoid token limits if too long
     """
     
     overview = gemini_service.generate_structured(prompt, DocumentOverview)
-    
-    # Store analysis
-    if document_id not in ANALYSIS_STORE:
-        ANALYSIS_STORE[document_id] = {}
-    ANALYSIS_STORE[document_id]["overview"] = overview.dict()
-    
     return overview
 
-@router.get("/documents/{document_id}/summary", response_model=DocumentSummary)
-def get_summary(document_id: str):
-    if document_id not in DOCUMENTS_STORE:
-        raise HTTPException(status_code=404, detail="Document not found")
-        
-    doc = DOCUMENTS_STORE[document_id]
+@router.post("/documents/{document_id}/summary", response_model=DocumentSummary)
+def get_summary(document_id: str, request: DocumentRequest):
     prompt = f"""
     ROLE: You are a helpful legal assistant for non-lawyers.
     TASK: Summarize the following document in plain English.
     CONSTRAINTS: Use simple language. Identify commitments, obligations, payments, dates, restrictions, and things worth reviewing.
     EVIDENCE:
-    {doc['full_text'][:20000]}
+    {request.full_text[:20000]}
     """
     
     summary = gemini_service.generate_structured(prompt, DocumentSummary)
@@ -110,13 +71,21 @@ def get_summary(document_id: str):
 
 @router.post("/documents/{document_id}/ask", response_model=QuestionAnswer)
 def ask_question(document_id: str, request: AskRequest):
-    if document_id not in DOCUMENTS_STORE:
-        raise HTTPException(status_code=404, detail="Document not found")
-        
-    # Retrieve relevant chunks
-    chunks = vector_store_manager.retrieve(document_id, request.question)
+    # Stateless chunking and retrieval on the fly
+    pages = [{"page": 1, "text": request.full_text}]
+    chunks = Chunker.chunk_document(pages)
     
-    context = "\n\n".join([f"Page {c.metadata.get('page', 'Unknown')}: {c.page_content}" for c in chunks])
+    # Store temporarily in memory just for this request
+    vector_store_manager.store_document(document_id, chunks)
+    
+    # Retrieve relevant chunks
+    relevant_chunks = vector_store_manager.retrieve(document_id, request.question)
+    
+    # Clean up memory
+    if document_id in vector_store_manager.stores:
+        del vector_store_manager.stores[document_id]
+    
+    context = "\n\n".join([f"Page {c.metadata.get('page', 'Unknown')}: {c.page_content}" for c in relevant_chunks])
     
     prompt = f"""
     ROLE: You are a knowledgeable assistant answering questions about a specific document.
@@ -148,29 +117,21 @@ def explain_terminology(request: TerminologyRequest):
     explanation = gemini_service.generate_structured(prompt, TerminologyExplanation)
     return explanation
 
-@router.get("/documents/{document_id}/action-plan", response_model=ActionPlan)
-def get_action_plan(document_id: str):
-    if document_id not in DOCUMENTS_STORE:
-        raise HTTPException(status_code=404, detail="Document not found")
-        
-    doc = DOCUMENTS_STORE[document_id]
+@router.post("/documents/{document_id}/action-plan", response_model=ActionPlan)
+def get_action_plan(document_id: str, request: DocumentRequest):
     prompt = f"""
     ROLE: You are a practical assistant helping a user figure out next steps after reading a document.
     TASK: Generate an action plan and preparation checklist based on the document.
     CONSTRAINTS: Be objective. Do not tell them what they *must* do legally, just what is practical (e.g., 'Gather X records', 'Ask a lawyer about Y').
     EVIDENCE:
-    {doc['full_text'][:20000]}
+    {request.full_text[:20000]}
     """
     
     plan = gemini_service.generate_structured(prompt, ActionPlan)
     return plan
     
-@router.get("/documents/{document_id}/findings")
-def get_findings(document_id: str):
-    if document_id not in DOCUMENTS_STORE:
-        raise HTTPException(status_code=404, detail="Document not found")
-        
-    doc = DOCUMENTS_STORE[document_id]
+@router.post("/documents/{document_id}/findings")
+def get_findings(document_id: str, request: DocumentRequest):
     prompt = f"""
     ROLE: You are a risk and attention detector for legal documents.
     TASK: Identify important clauses and potential areas of attention (e.g., unusual terms, strict obligations, ambiguities) in the document.
@@ -180,7 +141,7 @@ def get_findings(document_id: str):
     - 'attention_findings' must follow the AttentionFinding schema.
     - Do not give definitive legal advice or state that a clause is illegal.
     EVIDENCE:
-    {doc['full_text'][:20000]}
+    {request.full_text[:20000]}
     """
     
     from app.schemas.api import FindingsResult
@@ -190,29 +151,21 @@ def get_findings(document_id: str):
 
 from pydantic import BaseModel
 class CompareRequest(BaseModel):
-    doc_a_id: str
-    doc_b_id: str
+    doc_a_text: str
+    doc_b_text: str
 
 @router.post("/compare", response_model=ComparisonResult)
 def compare_documents(request: CompareRequest):
-    doc_a_id = request.doc_a_id
-    doc_b_id = request.doc_b_id
-    if doc_a_id not in DOCUMENTS_STORE or doc_b_id not in DOCUMENTS_STORE:
-        raise HTTPException(status_code=404, detail="One or both documents not found")
-        
-    doc_a = DOCUMENTS_STORE[doc_a_id]['full_text'][:15000]
-    doc_b = DOCUMENTS_STORE[doc_b_id]['full_text'][:15000]
-    
     prompt = f"""
     ROLE: You are an expert contract comparison analyst.
     TASK: Compare Document A and Document B. Highlight the meaningful changes, additions, removals, and shifts in scope (broader/narrower).
     CONSTRAINTS: Be objective. Do not provide legal advice.
     
     DOCUMENT A:
-    {doc_a}
+    {request.doc_a_text[:15000]}
     
     DOCUMENT B:
-    {doc_b}
+    {request.doc_b_text[:15000]}
     """
     
     comparison = gemini_service.generate_structured(prompt, ComparisonResult)

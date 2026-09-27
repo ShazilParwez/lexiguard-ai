@@ -2,6 +2,8 @@ export interface UploadResponse {
   document_id: string;
   filename: string;
   message: string;
+  full_text?: string;
+  pages?: any[];
 }
 
 export interface SourceMetadata {

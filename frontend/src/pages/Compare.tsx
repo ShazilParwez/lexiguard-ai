@@ -21,11 +21,19 @@ export default function Compare() {
       const docA = await api.uploadDocument(fileA);
       const docB = await api.uploadDocument(fileB);
       
+      if (!docA.full_text || !docB.full_text) {
+        throw new Error("Failed to extract text from documents.");
+      }
+      
       // Compare
-      const res = await api.compareDocuments(docA.document_id, docB.document_id);
+      const res = await api.compareDocuments(docA.full_text, docB.full_text);
       setResult(res);
-    } catch (err) {
-      setError('Comparison failed. Please try again.');
+    } catch (err: any) {
+      if (err.response?.status === 413) {
+        setError('One or both files are too large. Max size is 4.5MB.');
+      } else {
+        setError('Comparison failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

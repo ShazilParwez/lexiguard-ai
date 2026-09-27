@@ -5,6 +5,8 @@ class UploadResponse(BaseModel):
     document_id: str
     filename: str
     message: str = "Upload successful"
+    full_text: str = ""
+    pages: List[dict] = []
 
 class SourceMetadata(BaseModel):
     page: Optional[int] = None
@@ -71,6 +73,11 @@ class QuestionAnswer(AIResponseBase):
 
 class AskRequest(BaseModel):
     question: str
+    full_text: str
+
+class DocumentRequest(BaseModel):
+    full_text: str
+
 
 class ComparisonChange(BaseModel):
     category: str
