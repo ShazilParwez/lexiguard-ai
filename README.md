@@ -23,7 +23,7 @@ See `ARCHITECTURE.md` for a detailed breakdown of the GenAI pipeline and system 
 ## 5. Tech Stack
 *   **Frontend:** React, Vite, TypeScript, Tailwind CSS, Radix UI, Lucide React
 *   **Backend:** Python, FastAPI, Uvicorn, Pydantic
-*   **GenAI:** Google Gemini (gemini-1.5-flash), LangChain, Chroma DB
+*   **GenAI:** Google Gemini (gemini-2.5-flash), LangChain, Chroma DB
 *   **Document Processing:** PyMuPDF, python-docx
 
 ## 6. RAG Pipeline
