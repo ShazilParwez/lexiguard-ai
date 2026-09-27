@@ -14,16 +14,17 @@ class GeminiService:
             self.client = None
 
     def _get_dummy_data(self, schema: type[BaseModel], is_error: bool = False, error_msg: str = "") -> BaseModel:
-        # A simple fallback for demo/development when API key is not set or there's an error
         try:
             dummy = schema.model_construct()
             if hasattr(dummy, 'is_demo_response'):
                 dummy.is_demo_response = True
             if is_error:
+                error_text = f"API Rate Limit or Error: {error_msg}"
                 for field_name, field_info in schema.model_fields.items():
                     if field_info.annotation == str:
-                        setattr(dummy, field_name, f"API Error: {error_msg}")
-                        break
+                        setattr(dummy, field_name, error_text)
+                    elif getattr(field_info.annotation, '__origin__', None) == list:
+                        setattr(dummy, field_name, [error_text])
             return dummy
         except Exception:
             return schema.construct()
